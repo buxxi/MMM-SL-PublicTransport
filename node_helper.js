@@ -74,32 +74,25 @@ module.exports = NodeHelper.create({
     // The CurrentDepartures object holds this data
     //  CurrentDepartures = {
     //      StationId: string
-    //      LatestUpdate: date,     // When the realtime data was updated
-    //      DataAge: ??,            // The age of the data in ??
     //      departures: [dir][deps] // An array of array of Departure objects
     //  }
     getDeparture: function(station, resolve, reject) {
         log('Getting departures for station id ' + station.stationId);
         var self = this;
 
-        // http://api.sl.se/api2/realtimedeparturesV4.<FORMAT>?key=<DIN API NYCKEL>&siteid=<SITEID>&timewindow=<TIMEWINDOW>
+        // https://transport.integration.sl.se/v1/sites/{SiteId}/departures
         var transport = (this.config.SSL ? 'https' : 'http');
         var opt = {
-            uri: transport + '://api.sl.se/api2/realtimedeparturesV4.json',
+            uri: transport + `://transport.integration.sl.se/v1/sites/${station.stationId}/departures`,
             qs: {
-                key: this.config.apikey,
                 siteid: station.stationId,
                 timewindow: 60
             },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             json: true
         };
-
-        // Exclude those types of rides that you are not interested in
-        if (station.excludeTransportTypes !== undefined && Array.isArray(station.excludeTransportTypes)) {
-            for (var ix = 0; ix < station.excludeTransportTypes.length; ix++) {
-                opt.qs[station.excludeTransportTypes[ix]] = false
-            }
-        }
 
         if (this.config.proxy !== undefined) {
             opt.agent = new HttpsProxyAgent(Url.parse(this.config.proxy));
@@ -109,50 +102,39 @@ module.exports = NodeHelper.create({
         console.log(opt);
         request(opt)
             .then(function (resp) {
-                if (resp.StatusCode == 0) {
-                    //console.log(resp);
-                    var CurrentDepartures = {};
-                    var departures = [];
-                    CurrentDepartures.StationId = station.stationId;
-                    CurrentDepartures.StationName = (station.stationName === undefined ? 'NotSet' : station.stationName);
-                    CurrentDepartures.LatestUpdate = resp.ResponseData.LatestUpdate; // Anger när realtidsinformationen (DPS) senast uppdaterades.
-                    CurrentDepartures.DataAge = resp.ResponseData.DataAge; //Antal sekunder sedan tidsstämpeln LatestUpdate.
-                    CurrentDepartures.obtained = new Date(); //When we got it.
-                    self.addDepartures(station, departures, resp.ResponseData.Metros);
-                    self.addDepartures(station, departures, resp.ResponseData.Buses);
-                    self.addDepartures(station, departures, resp.ResponseData.Trains);
-                    self.addDepartures(station, departures, resp.ResponseData.Trams);
-                    self.addDepartures(station, departures, resp.ResponseData.Ships);
-                    //console.log(self.departures);
+                //console.log(resp);
+                var CurrentDepartures = {};
+                var departures = [];
+                CurrentDepartures.StationId = station.stationId;
+                CurrentDepartures.StationName = (station.stationName === undefined ? 'NotSet' : station.stationName);
+                CurrentDepartures.obtained = new Date(); //When we got it.
+                self.addDepartures(station, departures, resp.departures);
+                //console.log(self.departures);
 
-                    // Sort on ExpectedDateTime
-                    for (var ix = 0; ix < departures.length; ix++) {
-                        if (departures[ix] !== undefined) {
-                            departures[ix].sort(dynamicSort('ExpectedDateTime'))
-                        }
+                // Sort on ExpectedDateTime
+                for (var ix = 0; ix < departures.length; ix++) {
+                    if (departures[ix] !== undefined) {
+                        departures[ix].sort(dynamicSort('ExpectedDateTime'))
                     }
-                    //console.log(departures);
-
-                    // Add the sorted arrays into one array
-                    var temp = []
-                    for (var ix = 0; ix < departures.length; ix++) {
-                        if (departures[ix] !== undefined) {
-                            for (var iy = 0; iy < departures[ix].length; iy++) {
-                                temp.push(departures[ix][iy]);
-                            }
-                        }
-                    }
-                    //console.log(temp);
-
-                    // TODO:Handle resp.ResponseData.StopPointDeviations
-                    CurrentDepartures.departures = temp; 
-                    log('Found ' + CurrentDepartures.departures.length + ' DEPARTURES for station id=' + station.stationId);
-                    resolve(CurrentDepartures);
-
-                } else {
-                    log('Something went wrong: station id=' + station.stationId + ' StatusCode: ' + resp.StatusCode + ' Msg: ' + resp.Message);
-                    reject(resp);
                 }
+                //console.log(departures);
+
+                // Add the sorted arrays into one array
+                var temp = []
+                for (var ix = 0; ix < departures.length; ix++) {
+                    if (departures[ix] !== undefined) {
+                        for (var iy = 0; iy < departures[ix].length; iy++) {
+                            temp.push(departures[ix][iy]);
+                        }
+                    }
+                }
+                //console.log(temp);
+
+                // TODO:Handle resp.ResponseData.StopPointDeviations
+                CurrentDepartures.departures = temp; 
+                log('Found ' + CurrentDepartures.departures.length + ' DEPARTURES for station id=' + station.stationId);
+                resolve(CurrentDepartures);
+
             })
             .catch(function (err) {
                 log('Problems: station id=' + station.stationId + ' ' + err);
@@ -168,7 +150,7 @@ module.exports = NodeHelper.create({
             //debug("BLine: " + dep.LineNumber);
             dep = this.fixJourneyDirection(station, dep); 
             if (this.isWantedLine(station, dep)) {
-                if (this.isWantedDirection(dep.JourneyDirection)) { // TODO not needed, remove
+                if (this.isWantedDirection(dep.JourneyDirection) && this.isWantedTransportType(station, dep)) { // TODO not needed, remove
                     debug("Adding Line: " + dep.LineNumber + " Dir:" + dep.JourneyDirection + " Dst:" + dep.Destination);
                     if (departures[dep.JourneyDirection] === undefined) {
                         departures[dep.JourneyDirection] = [];
@@ -177,6 +159,18 @@ module.exports = NodeHelper.create({
                 }
             }
         }
+    },
+
+    // --------------------------------------- Did we get any unwanted transportation types
+    isWantedTransportType: function (station, dir) {
+        if (station.excludeTransportTypes !== undefined && Array.isArray(station.excludeTransportTypes)) {
+            for (var ix = 0; ix < station.excludeTransportTypes.length; ix++) {
+                if (station.excludeTransportTypes[ix].toUpperCase() == dir.TransportMode.toUpperCase()) {
+                    return false;
+                }
+            }
+        }
+        return true;
     },
 
     // --------------------------------------- Are we asking for this direction
