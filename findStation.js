@@ -47,9 +47,7 @@ function getStationId() {
 
     request(opt)
         .then(function(resp) {
-            if (resp.StatusCode == 0) {
-                console.log(resp);
-           } else {
+            if (resp.StatusCode != 0) {
                 console.log("Something went wrong when getting location: " + resp.StatusCode + ': '+ resp.Message);
             }
         })

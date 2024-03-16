@@ -1,5 +1,4 @@
 function Departure(data) {
-    console.log(data);
     this.TransportMode = data.line.transport_mode;
     this.LineNumber = data.line.id;
     this.Destination = data.destination;
@@ -7,7 +6,6 @@ function Departure(data) {
     this.ExpectedDateTime = data.expected;
     this.JourneyDirection = data.direction_code;
     this.DisplayTime = data.display;
-    console.log(this);
 }
 
 Departure.prototype.ToString = function() {

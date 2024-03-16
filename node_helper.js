@@ -51,7 +51,6 @@ module.exports = NodeHelper.create({
                     self.getDeparture(station, resolve, reject);
                 });
                 debug('Pushing promise for station ' + station.stationId);
-                console.log(P);
                 Proms.push(P);
             });
 
@@ -77,7 +76,6 @@ module.exports = NodeHelper.create({
     //      departures: [dir][deps] // An array of array of Departure objects
     //  }
     getDeparture: function(station, resolve, reject) {
-        log('Getting departures for station id ' + station.stationId);
         var self = this;
 
         // https://transport.integration.sl.se/v1/sites/{SiteId}/departures
@@ -99,17 +97,14 @@ module.exports = NodeHelper.create({
             debug('SL-PublicTransport: Using proxy ' + this.config.proxy);
         }
         debug('SL-PublicTransport: station id ' + station.stationId + ' Calling ' + opt.uri);
-        console.log(opt);
         request(opt)
             .then(function (resp) {
-                //console.log(resp);
                 var CurrentDepartures = {};
                 var departures = [];
                 CurrentDepartures.StationId = station.stationId;
                 CurrentDepartures.StationName = (station.stationName === undefined ? 'NotSet' : station.stationName);
                 CurrentDepartures.obtained = new Date(); //When we got it.
                 self.addDepartures(station, departures, resp.departures);
-                //console.log(self.departures);
 
                 // Sort on ExpectedDateTime
                 for (var ix = 0; ix < departures.length; ix++) {
@@ -117,7 +112,6 @@ module.exports = NodeHelper.create({
                         departures[ix].sort(dynamicSort('ExpectedDateTime'))
                     }
                 }
-                //console.log(departures);
 
                 // Add the sorted arrays into one array
                 var temp = []
@@ -128,11 +122,9 @@ module.exports = NodeHelper.create({
                         }
                     }
                 }
-                //console.log(temp);
 
                 // TODO:Handle resp.ResponseData.StopPointDeviations
                 CurrentDepartures.departures = temp; 
-                log('Found ' + CurrentDepartures.departures.length + ' DEPARTURES for station id=' + station.stationId);
                 resolve(CurrentDepartures);
 
             })
