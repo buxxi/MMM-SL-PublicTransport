@@ -91,9 +91,9 @@ Module.register("MMM-SL-PublicTransport", {
                 msg = msg + "\rupdateInterval too low, set to 1min";
                 this.config.updateInterval = 1*60*1000;
             }
-            if (this.config.uiUpdateInterval > 10*1000) {
-                msg = msg + "\ruiUpdateInterval too high, set to 10s";
-                this.config.uiUpdateInterval = 10*1000;
+            if (this.config.uiUpdateInterval > 60*1000) {
+                msg = msg + "\ruiUpdateInterval too high, set to 60s";
+                this.config.uiUpdateInterval = 60*1000;
             }
             if (this.config.updateInterval < this.config.uiUpdateInterval) {
                 msg = msg + "\rupdateInterval lower then uiUpdate, set to uiUpdateInterval";
@@ -314,17 +314,13 @@ Module.register("MMM-SL-PublicTransport", {
     },
 
     // --------------------------------------- Get a human readable duration 
-    // Dont like the moment.js humanize stuff, too lonmg in swedish and too crud.
     timeRemaining: function (tt, noPrefix) {
         var now = moment();
         var dur = tt.diff(now, 'seconds');
 
-        if (dur < 0) return 'left';
-        if (dur < 30) return 'now';
-        if (30 <= dur && dur < 60) return (noPrefix ? '' : 'in ') + ' 1 min';
-        if (60 <= dur && dur < 15 * 60) return (noPrefix ? '' : 'in ') + Math.round(dur / 60) + ' min';
-
-        return (noPrefix ? '' : 'at ') + tt.format('HH:mm');
+        if (dur < 0) return 'passerat';
+        if (dur < 30) return 'nu';
+        return tt.fromNow();
     },
 
     // --------------------------------------- Are we asking for this direction
